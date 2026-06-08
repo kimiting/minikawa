@@ -12,6 +12,7 @@ constexpr int ARM_DOWN_BUTTON = 25;
 constexpr int ARM_CENTER_BUTTON = 22;
 
 constexpr uint32_t PACKET_MAGIC = 0x4D4B5231; // "MKR1"
+constexpr uint8_t PAIR_ID = 1;
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;
 constexpr uint8_t MODE_ARM_DOWN = 2;
@@ -28,6 +29,7 @@ constexpr uint32_t PC_CONTROL_TIMEOUT_MS = 500;
 
 struct __attribute__((packed)) ControlPacket {
   uint32_t magic;
+  uint8_t pairId;
   uint32_t seq;
   int16_t leftSpeed;
   int16_t rightSpeed;
@@ -39,6 +41,7 @@ uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 ControlPacket packet = {
   PACKET_MAGIC,
+  PAIR_ID,
   0,
   0,
   0,
@@ -264,6 +267,7 @@ void setup() {
   pinMode(ARM_CENTER_BUTTON, INPUT_PULLUP);
 
   Serial.println("MiniKawa Atom Lite joystick controller");
+  Serial.printf("PAIR_ID: %u\n", PAIR_ID);
   Serial.println("Keep stick centered while booting for calibration.");
   Serial.println("PC commands: D left right arm | A arm | S");
 

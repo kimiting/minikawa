@@ -36,6 +36,7 @@ constexpr bool LEFT_INVERT = false;
 constexpr bool RIGHT_INVERT = true;
 
 constexpr uint32_t PACKET_MAGIC = 0x4D4B5231; // "MKR1"
+constexpr uint8_t PAIR_ID = 1;
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;
 constexpr uint8_t MODE_ARM_DOWN = 2;
@@ -48,6 +49,7 @@ constexpr uint32_t FAILSAFE_DISPLAY_INTERVAL_MS = 250;
 
 struct __attribute__((packed)) ControlPacket {
   uint32_t magic;
+  uint8_t pairId;
   uint32_t seq;
   int16_t leftSpeed;
   int16_t rightSpeed;
@@ -341,6 +343,7 @@ bool parseSerialCommand(const String &line, ControlPacket &packet) {
   }
 
   packet.magic = PACKET_MAGIC;
+  packet.pairId = PAIR_ID;
   packet.seq = lastSeq + 1;
   packet.leftSpeed = clampInt(left, -100, 100);
   packet.rightSpeed = clampInt(right, -100, 100);
@@ -383,6 +386,7 @@ void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
   ControlPacket packet;
   memcpy(&packet, data, sizeof(packet));
   if (packet.magic != PACKET_MAGIC) return;
+  if (packet.pairId != PAIR_ID) return;
 
   latestPacket = packet;
   packetAvailable = true;
@@ -411,6 +415,7 @@ void setup() {
   M5.Display.println("4 Servo PCB PWM");
   M5.Display.println("Waiting...");
   Serial.println("MiniKawa Receiver ready");
+  Serial.printf("PAIR_ID: %u\n", PAIR_ID);
   Serial.println("Commands: D left right [arm] | A arm | R delta | S | P arm left right spare | P? | T");
   printPins();
 }
