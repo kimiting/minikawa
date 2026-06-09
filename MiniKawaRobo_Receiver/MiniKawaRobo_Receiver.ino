@@ -14,6 +14,7 @@ constexpr int DEFAULT_ARM_SERVO_PIN = 33;
 constexpr int DEFAULT_LEFT_SERVO_PIN = 22;
 constexpr int DEFAULT_RIGHT_SERVO_PIN = 23;
 constexpr int SPARE_SERVO_PIN = 19;
+constexpr int STATUS_LED_PIN = 27;
 
 constexpr int ARM_MIN_ANGLE = 0;
 constexpr int ARM_MAX_ANGLE = 180;
@@ -46,6 +47,11 @@ constexpr uint32_t FAILSAFE_MS = 500;
 constexpr uint32_t SERIAL_BAUD = 115200;
 constexpr uint32_t DISPLAY_INTERVAL_MS = 100;
 constexpr uint32_t FAILSAFE_DISPLAY_INTERVAL_MS = 250;
+constexpr uint32_t LED_GREEN = 0x00ff00;
+constexpr uint32_t LED_BLUE = 0x0000ff;
+constexpr uint32_t LED_RED = 0xff0000;
+constexpr uint32_t LED_YELLOW = 0xffff00;
+constexpr uint32_t LED_PURPLE = 0xff00ff;
 
 struct __attribute__((packed)) ControlPacket {
   uint32_t magic;
@@ -81,6 +87,13 @@ int armServoPin = DEFAULT_ARM_SERVO_PIN;
 int leftServoPin = DEFAULT_LEFT_SERVO_PIN;
 int rightServoPin = DEFAULT_RIGHT_SERVO_PIN;
 int spareServoPin = SPARE_SERVO_PIN;
+
+void setLed(uint32_t color) {
+  uint8_t red = (color >> 16) & 0xff;
+  uint8_t green = (color >> 8) & 0xff;
+  uint8_t blue = color & 0xff;
+  neopixelWrite(STATUS_LED_PIN, red, green, blue);
+}
 
 int clampInt(int value, int minValue, int maxValue) {
   if (value < minValue) return minValue;
@@ -280,6 +293,14 @@ void applyPacket(const ControlPacket &packet) {
   rightServo.writeMicroseconds(rightPulse);
 
   updateStatusDisplay(packet, leftSpeed, rightSpeed);
+
+  if (packet.mode == MODE_ARM_UP || packet.mode == MODE_ARM_DOWN || packet.mode == MODE_ARM_CENTER || packet.mode == MODE_ARM_SET) {
+    setLed(LED_RED);
+  } else if (leftSpeed != 0 || rightSpeed != 0) {
+    setLed(LED_BLUE);
+  } else {
+    setLed(LED_GREEN);
+  }
 }
 
 void printRxLog(const ControlPacket &packet) {
@@ -393,6 +414,7 @@ void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
   Serial.begin(SERIAL_BAUD);
+  setLed(LED_PURPLE);
   M5.Display.setTextSize(2);
   M5.Display.println("MiniKawa Receiver");
 
@@ -440,6 +462,7 @@ void loop() {
       M5.Display.fillRect(0, 178, 320, 32, BLACK);
       M5.Display.setCursor(0, 178);
       M5.Display.printf("Failsafe stop");
+      setLed(LED_YELLOW);
     }
   }
 

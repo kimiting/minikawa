@@ -10,6 +10,7 @@ constexpr bool STICK_V_INVERT = true;
 constexpr int ARM_UP_BUTTON = 21;
 constexpr int ARM_DOWN_BUTTON = 25;
 constexpr int ARM_CENTER_BUTTON = 22;
+constexpr int STATUS_LED_PIN = 27;
 
 constexpr uint8_t PAIR_ID = 2;
 constexpr uint32_t PACKET_MAGIC = 0x4D4B5200 | PAIR_ID; // "MKR" + pair ID
@@ -26,6 +27,12 @@ constexpr float DEADBAND = 0.14f;
 constexpr int FILTER_SAMPLES = 8;
 constexpr int CALIBRATION_SAMPLES = 80;
 constexpr uint32_t PC_CONTROL_TIMEOUT_MS = 500;
+constexpr uint32_t LED_OFF = 0x000000;
+constexpr uint32_t LED_GREEN = 0x00ff00;
+constexpr uint32_t LED_BLUE = 0x0000ff;
+constexpr uint32_t LED_RED = 0xff0000;
+constexpr uint32_t LED_YELLOW = 0xffff00;
+constexpr uint32_t LED_PURPLE = 0xff00ff;
 
 struct __attribute__((packed)) ControlPacket {
   uint32_t magic;
@@ -57,6 +64,13 @@ uint32_t pcControlUntilMs = 0;
 bool sendOk = false;
 bool pcControlActive = false;
 String serialLine;
+
+void setLed(uint32_t color) {
+  uint8_t red = (color >> 16) & 0xff;
+  uint8_t green = (color >> 8) & 0xff;
+  uint8_t blue = color & 0xff;
+  neopixelWrite(STATUS_LED_PIN, red, green, blue);
+}
 
 int clampInt(int value, int minValue, int maxValue) {
   if (value < minValue) return minValue;
@@ -253,10 +267,23 @@ void showStatus(float joyH, float joyV) {
   }
 }
 
+void updateLed() {
+  if (!sendOk) {
+    setLed(LED_YELLOW);
+  } else if (packet.mode == MODE_ARM_UP || packet.mode == MODE_ARM_DOWN || packet.mode == MODE_ARM_CENTER || packet.mode == MODE_ARM_SET) {
+    setLed(LED_RED);
+  } else if (packet.leftSpeed != 0 || packet.rightSpeed != 0) {
+    setLed(LED_BLUE);
+  } else {
+    setLed(LED_GREEN);
+  }
+}
+
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
   Serial.begin(115200);
+  setLed(LED_PURPLE);
 
   pinMode(STICK_H, ANALOG);
   pinMode(STICK_V, ANALOG);
@@ -296,6 +323,7 @@ void loop() {
     lastSendMs = millis();
     sendPacket();
     showStatus(joyH, joyV);
+    updateLed();
   }
 
   delay(4);
