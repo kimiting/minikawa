@@ -52,6 +52,7 @@ constexpr uint32_t LED_BLUE = 0x0000ff;
 constexpr uint32_t LED_RED = 0xff0000;
 constexpr uint32_t LED_YELLOW = 0xffff00;
 constexpr uint32_t LED_PURPLE = 0xff00ff;
+constexpr uint32_t LED_WHITE = 0xffffff;
 
 struct __attribute__((packed)) ControlPacket {
   uint32_t magic;
@@ -76,6 +77,8 @@ uint32_t lastArmWriteMs = 0;
 uint32_t lastArmNudgeMs = 0;
 uint32_t lastDisplayMs = 0;
 uint32_t lastFailsafeDisplayMs = 0;
+uint32_t lastLedBlinkMs = 0;
+bool ledBlinkOn = false;
 uint8_t lastArmMode = MODE_DRIVE;
 String serialLine;
 int currentArmAngle = ARM_START_ANGLE;
@@ -93,6 +96,15 @@ void setLed(uint32_t color) {
   uint8_t green = (color >> 8) & 0xff;
   uint8_t blue = color & 0xff;
   neopixelWrite(STATUS_LED_PIN, red, green, blue);
+}
+
+void blinkLed(uint32_t color, uint32_t intervalMs = 250) {
+  uint32_t now = millis();
+  if (now - lastLedBlinkMs >= intervalMs) {
+    lastLedBlinkMs = now;
+    ledBlinkOn = !ledBlinkOn;
+    setLed(ledBlinkOn ? color : 0x000000);
+  }
 }
 
 int clampInt(int value, int minValue, int maxValue) {
@@ -463,12 +475,12 @@ void loop() {
 
   if (millis() - lastPacketMs > FAILSAFE_MS) {
     stopDriveServos();
+    blinkLed(LED_WHITE);
     if (millis() - lastFailsafeDisplayMs > FAILSAFE_DISPLAY_INTERVAL_MS) {
       lastFailsafeDisplayMs = millis();
       M5.Display.fillRect(0, 178, 320, 32, BLACK);
       M5.Display.setCursor(0, 178);
       M5.Display.printf("Failsafe stop");
-      setLed(LED_YELLOW);
     }
   }
 
