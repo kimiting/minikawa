@@ -12,7 +12,7 @@ constexpr int ARM_DOWN_BUTTON = 25;
 constexpr int ARM_CENTER_BUTTON = 22;
 constexpr int STATUS_LED_PIN = 27;
 
-constexpr uint8_t PAIR_ID = 2;
+constexpr uint8_t PAIR_ID = 1;
 constexpr uint32_t PACKET_MAGIC = 0x4D4B5200 | PAIR_ID; // "MKR" + pair ID
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;

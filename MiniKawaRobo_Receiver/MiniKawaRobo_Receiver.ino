@@ -36,7 +36,7 @@ constexpr int RIGHT_TRIM_US = 0;
 constexpr bool LEFT_INVERT = false;
 constexpr bool RIGHT_INVERT = true;
 
-constexpr uint8_t PAIR_ID = 2;
+constexpr uint8_t PAIR_ID = 1;
 constexpr uint32_t PACKET_MAGIC = 0x4D4B5200 | PAIR_ID; // "MKR" + pair ID
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;
@@ -193,6 +193,12 @@ void writeArmSpeed(int speed) {
   lastArmWriteMs = millis();
 }
 
+void stopArmSpeed() {
+  attachArmServoIfNeeded();
+  armServo.writeMicroseconds(ARM_STOP_US);
+  lastArmWriteMs = millis();
+}
+
 void attachServos() {
   armServo.detach();
   armServoAttached = false;
@@ -257,7 +263,7 @@ void applyArmMode(uint8_t mode, int requestedAngle) {
   } else if (mode == MODE_ARM_DOWN) {
     writeArmSpeed(-100);
   } else if (modeJustChanged) {
-    stopArmServoNow();
+    stopArmSpeed();
   }
 }
 
