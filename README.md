@@ -62,7 +62,7 @@ constexpr bool STICK_V_INVERT = true;
 
 constexpr int ARM_UP_BUTTON = 21;
 constexpr int ARM_DOWN_BUTTON = 25;
-constexpr int ARM_CENTER_BUTTON = 22;
+constexpr int PAIR_LOCK_BUTTON = 22;
 constexpr int PAIR_NEXT_BUTTON = 39;
 ```
 
@@ -70,7 +70,7 @@ constexpr int PAIR_NEXT_BUTTON = 39;
 
 - G21: 腕を上げる
 - G25: 腕を下げる
-- G22: 腕を中央へ戻す
+- G22: コントローラー側のペアIDをロック/解除
 - G39 / Atom Lite本体ボタン: コントローラー側のペアIDを1つ進める
 
 ジョイスティック操作:
@@ -253,6 +253,8 @@ constexpr uint8_t PAIR_ID_START = 1;
 内部的には `PACKET_MAGIC` に `PAIR_ID` を混ぜて判定しています。通信パケットのサイズは変えないので、スティックやタイヤの値がズレにくい方式です。
 
 ロボ側とコントローラー側は、G39 / Atom Lite本体ボタンを押すたびにペアIDが `1 -> 2 -> ... -> 9 -> 1` の順で変わります。シリアルモニタには `PAIR_ID changed: 2` のように表示されます。
+
+コントローラー側はG22でペアIDをロック/解除できます。ロック中はG39を押してもIDは変わりません。シリアルモニタには `PAIR_ID lock: ON` や `PAIR_ID lock: OFF` のように表示されます。
 
 例:
 

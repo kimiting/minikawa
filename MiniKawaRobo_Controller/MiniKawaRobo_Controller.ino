@@ -9,7 +9,7 @@ constexpr bool STICK_H_INVERT = true;
 constexpr bool STICK_V_INVERT = true;
 constexpr int ARM_UP_BUTTON = 21;
 constexpr int ARM_DOWN_BUTTON = 25;
-constexpr int ARM_CENTER_BUTTON = 22;
+constexpr int PAIR_LOCK_BUTTON = 22;
 constexpr int PAIR_NEXT_BUTTON = 39; // Atom Lite button
 constexpr int STATUS_LED_PIN = 27;
 
@@ -66,6 +66,7 @@ uint32_t lastSendMs = 0;
 uint32_t pcControlUntilMs = 0;
 bool sendOk = false;
 bool pcControlActive = false;
+bool pairIdLocked = false;
 uint8_t pairId = PAIR_ID_START;
 String serialLine;
 
@@ -113,6 +114,10 @@ void setPairId(uint8_t id) {
 }
 
 void incrementPairId() {
+  if (pairIdLocked) {
+    Serial.printf("PAIR_ID locked: %u\n", pairId);
+    return;
+  }
   uint8_t nextId = pairId + 1;
   if (nextId > PAIR_ID_MAX) nextId = PAIR_ID_MIN;
   setPairId(nextId);
@@ -122,6 +127,18 @@ void readPairButton() {
   if (M5.BtnA.wasPressed()) {
     incrementPairId();
   }
+}
+
+void readPairLockButton() {
+  static bool lastLockPressed = false;
+  bool lockPressed = digitalRead(PAIR_LOCK_BUTTON) == LOW;
+
+  if (lockPressed && !lastLockPressed) {
+    pairIdLocked = !pairIdLocked;
+    Serial.printf("PAIR_ID lock: %s\n", pairIdLocked ? "ON" : "OFF");
+  }
+
+  lastLockPressed = lockPressed;
 }
 
 void calibrateStick() {
@@ -195,16 +212,8 @@ void updateDriveFromPhysicalStick(float physicalH, float physicalV) {
 }
 
 uint8_t readArmButtonMode() {
-  static bool lastCenterPressed = false;
   bool upPressed = digitalRead(ARM_UP_BUTTON) == LOW;
   bool downPressed = digitalRead(ARM_DOWN_BUTTON) == LOW;
-  bool centerPressed = digitalRead(ARM_CENTER_BUTTON) == LOW;
-
-  if (centerPressed && !lastCenterPressed) {
-    lastCenterPressed = centerPressed;
-    return MODE_ARM_CENTER;
-  }
-  lastCenterPressed = centerPressed;
 
   if (upPressed && !downPressed) return MODE_ARM_UP;
   if (downPressed && !upPressed) return MODE_ARM_DOWN;
@@ -281,8 +290,9 @@ void showStatus(float joyH, float joyV) {
   static uint32_t lastPrintMs = 0;
   if (millis() - lastPrintMs > 250) {
     lastPrintMs = millis();
-    Serial.printf("ID=%u H=%.2f V=%.2f Src=%s Mode=%s L/R=%d/%d Arm=%d Send=%s\n",
+    Serial.printf("ID=%u Lock=%s H=%.2f V=%.2f Src=%s Mode=%s L/R=%d/%d Arm=%d Send=%s\n",
                   pairId,
+                  pairIdLocked ? "ON" : "OFF",
                   joyH,
                   joyV,
                   pcControlActive ? "PC" : "STICK",
@@ -297,6 +307,8 @@ void showStatus(float joyH, float joyV) {
 void updateLed() {
   if (!sendOk) {
     setLed(LED_YELLOW);
+  } else if (pairIdLocked) {
+    setLed(LED_PURPLE);
   } else if (packet.mode == MODE_ARM_UP || packet.mode == MODE_ARM_DOWN || packet.mode == MODE_ARM_CENTER || packet.mode == MODE_ARM_SET) {
     setLed(LED_RED);
   } else if (packet.leftSpeed != 0 || packet.rightSpeed != 0) {
@@ -316,11 +328,12 @@ void setup() {
   pinMode(STICK_V, ANALOG);
   pinMode(ARM_UP_BUTTON, INPUT_PULLUP);
   pinMode(ARM_DOWN_BUTTON, INPUT_PULLUP);
-  pinMode(ARM_CENTER_BUTTON, INPUT_PULLUP);
+  pinMode(PAIR_LOCK_BUTTON, INPUT_PULLUP);
 
   Serial.println("MiniKawa Atom Lite joystick controller");
   Serial.printf("PAIR_ID: %u\n", pairId);
   Serial.printf("Press G%d / Atom button to change PAIR_ID.\n", PAIR_NEXT_BUTTON);
+  Serial.printf("Press G%d to lock/unlock PAIR_ID.\n", PAIR_LOCK_BUTTON);
   Serial.println("Keep stick centered while booting for calibration.");
   Serial.println("PC commands: D left right arm | A arm | S");
 
@@ -330,6 +343,7 @@ void setup() {
 
 void loop() {
   M5.update();
+  readPairLockButton();
   readPairButton();
   readPcCommands();
 
