@@ -10,10 +10,13 @@ constexpr bool STICK_V_INVERT = true;
 constexpr int ARM_UP_BUTTON = 21;
 constexpr int ARM_DOWN_BUTTON = 25;
 constexpr int ARM_CENTER_BUTTON = 22;
+constexpr int PAIR_NEXT_BUTTON = 39; // Atom Lite button
 constexpr int STATUS_LED_PIN = 27;
 
-constexpr uint8_t PAIR_ID = 1;
-constexpr uint32_t PACKET_MAGIC = 0x4D4B5200 | PAIR_ID; // "MKR" + pair ID
+constexpr uint8_t PAIR_ID_START = 1;
+constexpr uint8_t PAIR_ID_MIN = 1;
+constexpr uint8_t PAIR_ID_MAX = 9;
+constexpr uint32_t PACKET_MAGIC_BASE = 0x4D4B5200; // "MKR" + pair ID
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;
 constexpr uint8_t MODE_ARM_DOWN = 2;
@@ -46,7 +49,7 @@ struct __attribute__((packed)) ControlPacket {
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 ControlPacket packet = {
-  PACKET_MAGIC,
+  PACKET_MAGIC_BASE | PAIR_ID_START,
   0,
   0,
   0,
@@ -63,6 +66,7 @@ uint32_t lastSendMs = 0;
 uint32_t pcControlUntilMs = 0;
 bool sendOk = false;
 bool pcControlActive = false;
+uint8_t pairId = PAIR_ID_START;
 String serialLine;
 
 void setLed(uint32_t color) {
@@ -96,6 +100,28 @@ float normalizeAxis(int raw, int center, bool invert) {
   float value = (raw - center) / span;
   if (invert) value = -value;
   return applyDeadband(clampFloat(value, -1.0f, 1.0f));
+}
+
+uint32_t packetMagicForPair(uint8_t id) {
+  return PACKET_MAGIC_BASE | id;
+}
+
+void setPairId(uint8_t id) {
+  pairId = id;
+  packet.magic = packetMagicForPair(pairId);
+  Serial.printf("PAIR_ID changed: %u\n", pairId);
+}
+
+void incrementPairId() {
+  uint8_t nextId = pairId + 1;
+  if (nextId > PAIR_ID_MAX) nextId = PAIR_ID_MIN;
+  setPairId(nextId);
+}
+
+void readPairButton() {
+  if (M5.BtnA.wasPressed()) {
+    incrementPairId();
+  }
 }
 
 void calibrateStick() {
@@ -255,7 +281,8 @@ void showStatus(float joyH, float joyV) {
   static uint32_t lastPrintMs = 0;
   if (millis() - lastPrintMs > 250) {
     lastPrintMs = millis();
-    Serial.printf("H=%.2f V=%.2f Src=%s Mode=%s L/R=%d/%d Arm=%d Send=%s\n",
+    Serial.printf("ID=%u H=%.2f V=%.2f Src=%s Mode=%s L/R=%d/%d Arm=%d Send=%s\n",
+                  pairId,
                   joyH,
                   joyV,
                   pcControlActive ? "PC" : "STICK",
@@ -292,7 +319,8 @@ void setup() {
   pinMode(ARM_CENTER_BUTTON, INPUT_PULLUP);
 
   Serial.println("MiniKawa Atom Lite joystick controller");
-  Serial.printf("PAIR_ID: %u\n", PAIR_ID);
+  Serial.printf("PAIR_ID: %u\n", pairId);
+  Serial.printf("Press G%d / Atom button to change PAIR_ID.\n", PAIR_NEXT_BUTTON);
   Serial.println("Keep stick centered while booting for calibration.");
   Serial.println("PC commands: D left right arm | A arm | S");
 
@@ -302,21 +330,17 @@ void setup() {
 
 void loop() {
   M5.update();
+  readPairButton();
   readPcCommands();
 
   float joyH = 0.0f;
   float joyV = 0.0f;
   readJoystick(joyH, joyV);
 
-  bool centerRequested = false;
-  if (M5.BtnA.wasPressed()) {
-    centerRequested = true;
-  }
-
   if (!pcControlActive) {
     updateDriveFromPhysicalStick(joyH, joyV);
     uint8_t armMode = readArmButtonMode();
-    packet.mode = centerRequested ? MODE_ARM_CENTER : armMode;
+    packet.mode = armMode;
   }
 
   if (millis() - lastSendMs >= SEND_INTERVAL_MS) {

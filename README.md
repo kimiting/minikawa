@@ -63,6 +63,7 @@ constexpr bool STICK_V_INVERT = true;
 constexpr int ARM_UP_BUTTON = 21;
 constexpr int ARM_DOWN_BUTTON = 25;
 constexpr int ARM_CENTER_BUTTON = 22;
+constexpr int PAIR_NEXT_BUTTON = 39;
 ```
 
 ボタン操作:
@@ -70,6 +71,7 @@ constexpr int ARM_CENTER_BUTTON = 22;
 - G21: 腕を上げる
 - G25: 腕を下げる
 - G22: 腕を中央へ戻す
+- G39 / Atom Lite本体ボタン: コントローラー側のペアIDを1つ進める
 
 ジョイスティック操作:
 
@@ -243,12 +245,14 @@ constexpr uint8_t PAIR_ID = 1;
 コントローラー側:
 
 ```cpp
-constexpr uint8_t PAIR_ID = 1;
+constexpr uint8_t PAIR_ID_START = 1;
 ```
 
 同じ番号同士だけ通信します。
 
 内部的には `PACKET_MAGIC` に `PAIR_ID` を混ぜて判定しています。通信パケットのサイズは変えないので、スティックやタイヤの値がズレにくい方式です。
+
+コントローラー側は、G39 / Atom Lite本体ボタンを押すたびにペアIDが `1 -> 2 -> ... -> 9 -> 1` の順で変わります。シリアルモニタには `PAIR_ID changed: 2` のように表示されます。
 
 例:
 
@@ -257,6 +261,8 @@ constexpr uint8_t PAIR_ID = 1;
 - ペアC: ロボ側 `PAIR_ID = 3`、コントローラー側 `PAIR_ID = 3`
 
 番号が違うパケットはロボ側で無視されます。書き換えたら、ロボ側とコントローラー側の両方を書き込み直してください。
+
+コントローラーだけG39でIDを変えられます。ロボ側のIDはスケッチ内の `PAIR_ID` で固定なので、使いたい番号でロボ側も書き込んでください。
 
 ## ロボ側が受け取っている入力を見る
 
