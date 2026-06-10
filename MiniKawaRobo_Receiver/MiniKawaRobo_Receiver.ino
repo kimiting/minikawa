@@ -15,6 +15,7 @@ constexpr int DEFAULT_LEFT_SERVO_PIN = 22;
 constexpr int DEFAULT_RIGHT_SERVO_PIN = 23;
 constexpr int SPARE_SERVO_PIN = 19;
 constexpr int STATUS_LED_PIN = 27;
+constexpr int PAIR_NEXT_BUTTON = 39; // Atom Lite button
 
 constexpr int ARM_MIN_ANGLE = 0;
 constexpr int ARM_MAX_ANGLE = 180;
@@ -36,8 +37,10 @@ constexpr int RIGHT_TRIM_US = 0;
 constexpr bool LEFT_INVERT = false;
 constexpr bool RIGHT_INVERT = true;
 
-constexpr uint8_t PAIR_ID = 1;
-constexpr uint32_t PACKET_MAGIC = 0x4D4B5200 | PAIR_ID; // "MKR" + pair ID
+constexpr uint8_t PAIR_ID_START = 1;
+constexpr uint8_t PAIR_ID_MIN = 1;
+constexpr uint8_t PAIR_ID_MAX = 9;
+constexpr uint32_t PACKET_MAGIC_BASE = 0x4D4B5200; // "MKR" + pair ID
 constexpr uint8_t MODE_DRIVE = 0;
 constexpr uint8_t MODE_ARM_UP = 1;
 constexpr uint8_t MODE_ARM_DOWN = 2;
@@ -85,6 +88,7 @@ int currentArmAngle = ARM_START_ANGLE;
 float estimatedArmAngle = ARM_START_ANGLE;
 uint32_t lastArmEstimateMs = 0;
 bool armServoAttached = false;
+uint8_t pairId = PAIR_ID_START;
 
 int armServoPin = DEFAULT_ARM_SERVO_PIN;
 int leftServoPin = DEFAULT_LEFT_SERVO_PIN;
@@ -117,6 +121,43 @@ int speedToPulse(int speed, bool invert, int trimUs) {
   speed = clampInt(speed, -100, 100);
   if (invert) speed = -speed;
   return SERVO_STOP_US + trimUs + (speed * SERVO_SPEED_US / 100);
+}
+
+uint32_t packetMagicForPair(uint8_t id) {
+  return PACKET_MAGIC_BASE | id;
+}
+
+void stopAllMotion() {
+  stopDriveServos();
+  stopArmSpeed();
+  lastArmMode = MODE_DRIVE;
+}
+
+void setPairId(uint8_t id) {
+  pairId = id;
+  packetAvailable = false;
+  latestPacket = {};
+  lastPacketMs = 0;
+  lastSeq = 0;
+  stopAllMotion();
+  Serial.printf("PAIR_ID changed: %u\n", pairId);
+  M5.Display.fillScreen(BLACK);
+  M5.Display.setCursor(0, 0);
+  M5.Display.printf("PAIR ID %u\n", pairId);
+  M5.Display.println("Waiting...");
+  setLed(LED_PURPLE);
+}
+
+void incrementPairId() {
+  uint8_t nextId = pairId + 1;
+  if (nextId > PAIR_ID_MAX) nextId = PAIR_ID_MIN;
+  setPairId(nextId);
+}
+
+void readPairButton() {
+  if (M5.BtnA.wasPressed()) {
+    incrementPairId();
+  }
 }
 
 void stopDriveServos() {
@@ -324,7 +365,8 @@ void applyPacket(const ControlPacket &packet) {
 void printRxLog(const ControlPacket &packet) {
   if (millis() - lastRxLogMs < 100) return;
   lastRxLogMs = millis();
-  Serial.printf("RX seq=%lu L/R=%d/%d Arm=%d Mode=%s age=0ms\n",
+  Serial.printf("ID=%u RX seq=%lu L/R=%d/%d Arm=%d Mode=%s age=0ms\n",
+                pairId,
                 static_cast<unsigned long>(packet.seq),
                 packet.leftSpeed,
                 packet.rightSpeed,
@@ -380,7 +422,7 @@ bool parseSerialCommand(const String &line, ControlPacket &packet) {
     return false;
   }
 
-  packet.magic = PACKET_MAGIC;
+  packet.magic = packetMagicForPair(pairId);
   packet.seq = lastSeq + 1;
   packet.leftSpeed = clampInt(left, -100, 100);
   packet.rightSpeed = clampInt(right, -100, 100);
@@ -422,7 +464,7 @@ void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
 
   ControlPacket packet;
   memcpy(&packet, data, sizeof(packet));
-  if (packet.magic != PACKET_MAGIC) return;
+  if (packet.magic != packetMagicForPair(pairId)) return;
 
   latestPacket = packet;
   packetAvailable = true;
@@ -452,13 +494,15 @@ void setup() {
   M5.Display.println("4 Servo PCB PWM");
   M5.Display.println("Waiting...");
   Serial.println("MiniKawa Receiver ready");
-  Serial.printf("PAIR_ID: %u\n", PAIR_ID);
+  Serial.printf("PAIR_ID: %u\n", pairId);
+  Serial.printf("Press G%d / Atom button to change PAIR_ID.\n", PAIR_NEXT_BUTTON);
   Serial.println("Commands: D left right [arm] | A arm | R delta | S | P arm left right spare | P? | T");
   printPins();
 }
 
 void loop() {
   M5.update();
+  readPairButton();
   readSerialCommands();
 
   if (packetAvailable) {
