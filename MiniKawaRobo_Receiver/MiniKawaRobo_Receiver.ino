@@ -73,7 +73,6 @@ Servo spareServo;
 
 volatile bool packetAvailable = false;
 ControlPacket latestPacket = {};
-uint8_t lockedControllerMac[6] = {};
 uint32_t lastPacketMs = 0;
 uint32_t lastSeq = 0;
 uint32_t lastRxLogMs = 0;
@@ -90,9 +89,6 @@ float estimatedArmAngle = ARM_START_ANGLE;
 uint32_t lastArmEstimateMs = 0;
 bool armServoAttached = false;
 uint8_t pairId = PAIR_ID_START;
-bool controllerLocked = false;
-bool controllerLockAnnounced = false;
-volatile uint32_t rejectedControllerPackets = 0;
 
 int armServoPin = DEFAULT_ARM_SERVO_PIN;
 int leftServoPin = DEFAULT_LEFT_SERVO_PIN;
@@ -121,27 +117,6 @@ int clampInt(int value, int minValue, int maxValue) {
   return value;
 }
 
-bool sameMac(const uint8_t *a, const uint8_t *b) {
-  return memcmp(a, b, 6) == 0;
-}
-
-void printMac(const uint8_t *mac) {
-  Serial.printf("%02X:%02X:%02X:%02X:%02X:%02X",
-                mac[0],
-                mac[1],
-                mac[2],
-                mac[3],
-                mac[4],
-                mac[5]);
-}
-
-void unlockController() {
-  controllerLocked = false;
-  controllerLockAnnounced = false;
-  memset(lockedControllerMac, 0, sizeof(lockedControllerMac));
-  rejectedControllerPackets = 0;
-}
-
 int speedToPulse(int speed, bool invert, int trimUs) {
   speed = clampInt(speed, -100, 100);
   if (invert) speed = -speed;
@@ -164,7 +139,6 @@ void setPairId(uint8_t id) {
   latestPacket = {};
   lastPacketMs = 0;
   lastSeq = 0;
-  unlockController();
   stopAllMotion();
   Serial.printf("PAIR_ID changed: %u\n", pairId);
   M5.Display.fillScreen(BLACK);
@@ -391,20 +365,13 @@ void applyPacket(const ControlPacket &packet) {
 void printRxLog(const ControlPacket &packet) {
   if (millis() - lastRxLogMs < 100) return;
   lastRxLogMs = millis();
-  if (controllerLocked && !controllerLockAnnounced) {
-    Serial.print("Controller locked: ");
-    printMac(lockedControllerMac);
-    Serial.println();
-    controllerLockAnnounced = true;
-  }
-  Serial.printf("ID=%u RX seq=%lu L/R=%d/%d Arm=%d Mode=%s Reject=%lu age=0ms\n",
+  Serial.printf("ID=%u RX seq=%lu L/R=%d/%d Arm=%d Mode=%s age=0ms\n",
                 pairId,
                 static_cast<unsigned long>(packet.seq),
                 packet.leftSpeed,
                 packet.rightSpeed,
                 currentArmAngle,
-                modeName(packet.mode),
-                static_cast<unsigned long>(rejectedControllerPackets));
+                modeName(packet.mode));
 }
 
 bool parseSerialCommand(const String &line, ControlPacket &packet) {
@@ -451,10 +418,6 @@ bool parseSerialCommand(const String &line, ControlPacket &packet) {
   } else if (line == "T") {
     runServoTest();
     return false;
-  } else if (line == "U") {
-    unlockController();
-    Serial.println("Controller lock cleared");
-    return false;
   } else {
     return false;
   }
@@ -481,7 +444,7 @@ void readSerialCommands() {
           latestPacket = packet;
           packetAvailable = true;
           Serial.println("OK");
-        } else if (serialLine != "T" && serialLine != "U" && serialLine != "P?" && !serialLine.startsWith("P ")) {
+        } else if (serialLine != "T" && serialLine != "P?" && !serialLine.startsWith("P ")) {
           Serial.println("ERR");
         }
       }
@@ -494,25 +457,14 @@ void readSerialCommands() {
 
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  const uint8_t *sourceMac = info->src_addr;
 #else
 void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
-  const uint8_t *sourceMac = mac;
 #endif
   if (len != sizeof(ControlPacket)) return;
 
   ControlPacket packet;
   memcpy(&packet, data, sizeof(packet));
   if (packet.magic != packetMagicForPair(pairId)) return;
-
-  if (!controllerLocked) {
-    memcpy(lockedControllerMac, sourceMac, sizeof(lockedControllerMac));
-    controllerLocked = true;
-    controllerLockAnnounced = false;
-  } else if (!sameMac(lockedControllerMac, sourceMac)) {
-    rejectedControllerPackets++;
-    return;
-  }
 
   latestPacket = packet;
   packetAvailable = true;
@@ -544,7 +496,7 @@ void setup() {
   Serial.println("MiniKawa Receiver ready");
   Serial.printf("PAIR_ID: %u\n", pairId);
   Serial.printf("Press G%d / Atom button to change PAIR_ID.\n", PAIR_NEXT_BUTTON);
-  Serial.println("Commands: D left right [arm] | A arm | R delta | S | P arm left right spare | P? | T | U");
+  Serial.println("Commands: D left right [arm] | A arm | R delta | S | P arm left right spare | P? | T");
   printPins();
 }
 
